@@ -29,6 +29,7 @@ async function run() {
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
         const subjectCollection = client.db("result-app").collection("subjects");
+        const resultCollection = client.db("result-app").collection("results");
 
         // Add a new subject to the collection
         app.post("/subjects", async (req, res) => {
@@ -46,6 +47,22 @@ async function run() {
                 res.status(500).json({ message: "Failed to add subject." });
             }
         });
+        app.post("/results", async (req, res) => {
+            try {
+                const resultData = req.body;
+                const result = await resultCollection.insertOne(resultData);
+
+
+
+                res.status(201).json({
+                    result
+                });
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({ message: "Failed to add result." });
+            }
+        });
+
 
 
         // Update an existing subject in the collection
@@ -88,6 +105,38 @@ async function run() {
                 res.status(500).json({ message: "Failed to fetch subjects." });
             }
         });
+        app.get("/results", async (req, res) => {
+            try {
+                const results = await resultCollection.find().toArray();
+                res.status(200).json(results);
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({ message: "Failed to fetch results." });
+            }
+        });
+
+        app.get("/api/results", async (req, res) => {
+            try {
+                const { studentID } = req.query; // Get studentID from query params
+                console.log(studentID);
+                if (!studentID) {
+                    return res.status(400).json({ message: "Student ID is required." });
+                }
+
+                // Query to find the result by studentID
+                const result = await resultCollection.findOne({ studentId: studentID });
+                console.log("result", result);
+                // If result is found, return it, else return a message
+                if (result) {
+                    res.status(200).json(result);
+                } else {
+                    res.status(404).json({ message: "No result found for the given student ID." });
+                }
+            } catch (error) {
+                console.error("Error fetching results:", error);
+                res.status(500).json({ message: "Failed to fetch results." });
+            }
+        });
 
 
         // Delete a subject from the collection
@@ -99,7 +148,6 @@ async function run() {
             const result = await subjectCollection.deleteOne(query);
             res.send(result);
         });
-
 
 
 
