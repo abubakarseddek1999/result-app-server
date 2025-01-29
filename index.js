@@ -1,4 +1,7 @@
 const express = require('express');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 5000;
@@ -6,6 +9,16 @@ const port = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Initialize session middleware
+app.use(session({
+    secret: 'your_secret_key',  // Use a secure secret in production
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }  // Set 'secure: true' for HTTPS environments
+}));
+
+
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
@@ -30,6 +43,7 @@ async function run() {
 
         const subjectCollection = client.db("result-app").collection("subjects");
         const resultCollection = client.db("result-app").collection("results");
+        const usersCollection = client.db("result-app").collection("users");
 
         // Add a new subject to the collection
         app.post("/subjects", async (req, res) => {
@@ -148,6 +162,76 @@ async function run() {
             const result = await subjectCollection.deleteOne(query);
             res.send(result);
         });
+
+        // register a new user
+
+        app.post("/register", async (req, res) => {
+            try {
+                const { name, email, password } = req.body;
+
+                if (!name || !email || !password) {
+                    return res.status(400).json({ message: "All fields are required." });
+                }
+
+                const usersCollection = client.db("result-app").collection("users");
+
+                // Check if user already exists
+                const existingUser = await usersCollection.findOne({ email });
+                if (existingUser) {
+                    return res.status(400).json({ message: "Email already registered." });
+                }
+
+                // Hash the password before saving it
+                const hashedPassword = await bcrypt.hash(password, 10); // 10 is the salt rounds
+
+                // Insert the new user with the hashed password
+                const result = await usersCollection.insertOne({ name, email, password: hashedPassword });
+                res.status(201).json({ message: "User registered successfully", userId: result.insertedId });
+            } catch (error) {
+                console.error("Error registering user:", error);
+                res.status(500).json({ message: "Failed to register user." });
+            }
+        });
+
+
+        // User login
+        app.post("/login", async (req, res) => {
+            try {
+                const { email, password } = req.body;
+
+                if (!email || !password) {
+                    return res.status(400).json({ message: "Email and password are required." });
+                }
+
+                const user = await usersCollection.findOne({ email });
+                if (!user) {
+                    return res.status(400).json({ message: "Invalid email or password." });
+                }
+
+                // Compare the provided password with the hashed password in the database
+                const isPasswordValid = await bcrypt.compare(password, user.password);
+                if (!isPasswordValid) {
+                    return res.status(400).json({ message: "Invalid email or password." });
+                }
+
+                // Generate a JWT token
+                const token = jwt.sign(
+                    { id: user._id, name: user.name, email: user.email },
+                    'your_secret_key',
+                    { expiresIn: '1h' }
+                );
+
+                res.status(200).json({
+                    message: "Login successful",
+                    token: token // Send token in the response
+                });
+            } catch (error) {
+                console.error("Error logging in:", error);
+                res.status(500).json({ message: "Failed to login." });
+            }
+        });
+
+
 
 
 
